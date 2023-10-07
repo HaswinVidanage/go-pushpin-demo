@@ -1,0 +1,46 @@
+.App {
+  text-align: center;
+}
+
+.stream-section {
+  display: inline-block;
+  vertical-align: top;
+  margin-right: 20px;
+  border: 1px solid black;
+  padding: 10px;
+}
+
+.messages {
+  border: 1px solid black;
+  height: 600px;
+  width: 400px;
+  overflow-y: scroll;
+  margin-top: 10px;
+  padding: 5px;
+}
+
+.message-box {
+  height: 600px;
+  overflow-y: scroll;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.message {
+  margin: 10px;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-left: 10px;
+}
+
+.action-button {
+  margin: 10px;
+}
