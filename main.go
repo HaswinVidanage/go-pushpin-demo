@@ -59,7 +59,7 @@ func handleRequestSSE(w http.ResponseWriter, r *http.Request) {
 		channelName = "default-channel"
 	}
 
-	fmt.Printf("SSE channelName: %s\n", channelName)
+	log.Printf("SSE channelName: %s\n", channelName)
 
 	// Set necessary headers for SSE
 	w.Header().Set("Grip-Hold", "stream")
@@ -159,13 +159,6 @@ func setCORSHeaders(w http.ResponseWriter) {
 }
 
 func handlePreflight(w http.ResponseWriter, r *http.Request) {
-
-	for name, values := range r.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", name, value)
-		}
-	}
-
 	// Handle CORS Preflight
 	if r.Method == http.MethodOptions {
 		setCORSHeaders(w)
@@ -178,10 +171,10 @@ func handlePreflight(w http.ResponseWriter, r *http.Request) {
 		handleRequestSSE(w, r)
 	case "/longpoll":
 		handleRequestLongPolling(w, r)
-	case "/publish":
-		handlePublish(w, r)
 	case "/websocket":
 		handleWebSocket(w, r)
+	case "/publish":
+		handlePublish(w, r)
 	}
 }
 
