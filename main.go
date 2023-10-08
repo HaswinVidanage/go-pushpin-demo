@@ -186,10 +186,10 @@ func handlePreflight(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/sse", handlePreflight)
-	http.HandleFunc("/longpoll", handlePreflight)
-	http.HandleFunc("/publish", handlePreflight)
-	http.HandleFunc("/websocket", handlePreflight)
+	http.HandleFunc("/sse", handlePreflight)       // for SSE
+	http.HandleFunc("/longpoll", handlePreflight)  // for long polling
+	http.HandleFunc("/websocket", handlePreflight) // for WebSocket
+	http.HandleFunc("/publish", handlePreflight)   // for publishing
 	log.Println("Server starting on :8000...")
 	err := http.ListenAndServe(":8000", nil)
 	if err != nil {

@@ -1,11 +1,6 @@
-/**
- * React Native App with Event Streaming
- */
-
 import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -24,18 +19,25 @@ function App(): JSX.Element {
     backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
   };
 
-  const [sseActive, setSseActive] = useState(false);
-  const [lpActive, setLpActive] = useState(false);
-  const [wsActive, setWsActive] = useState(false);
-  const [sseMessages, setSseMessages] = useState<string[]>([]);
-  const [lpMessages, setLpMessages] = useState<string[]>([]);
-  const [wsMessages, setWsMessages] = useState<string[]>([]);
+  const [messages, setMessages] = useState<string[]>([]);
   const [messageInput, setMessageInput] = useState("");
+  const [selectedOption, setSelectedOption] = useState<'SSE' | 'WS' | 'LP' | null>(null);
+
+  const OptionButton = ({ title }) => (
+      <Button
+          title={title}
+          color={selectedOption === title ? 'blue' : 'gray'}
+          onPress={() => {
+            setMessages([]);
+            setSelectedOption(prevOption => prevOption === title ? null : title as any);
+          }}
+      />
+  );
 
   useEffect(() => {
-    let es;
+    let es, ws;
 
-    if (sseActive) {
+    if (selectedOption === 'SSE') {
       es = new EventSource('http://localhost:7999/sse', {
         headers: {
           'Authorization': 'Bearer 1234',
@@ -44,78 +46,68 @@ function App(): JSX.Element {
       });
 
       es.addEventListener('message', (event) => {
-        setSseMessages((prev) => [...prev, event.data]);
+        setMessages((prev) => [...prev, event.data]);
       });
 
       es.addEventListener('error', (error) => {
         console.error("SSE Error:", error);
-        if (sseActive) {
-          setTimeout(() => {
-            // Reconnect logic here
-          }, 1000);
-        }
       });
+    } else if (selectedOption === 'WS') {
+      const channelName = "test-common";
+      ws = new WebSocket(`ws://localhost:7999/websocket?channel=${channelName}`);
+      ws.onmessage = function (event) {
+        setMessages((prev) => [...prev, event.data]);
+      };
+    } else if (selectedOption === 'LP') {
+      poll();
     }
 
     return () => {
       if (es) {
         es.close();
       }
-    };
-  }, [sseActive]);
-
-  useEffect(() => {
-    let ws;
-    if (wsActive) {
-      const channelName = "test-common";
-      ws = new WebSocket(`ws://localhost:7999/websocket?channel=${channelName}`);
-      ws.onmessage = function (event) {
-        setWsMessages((prev) => [...prev, event.data]);
-      };
-      ws.onclose = function () {
-        setTimeout(() => {
-          ws = new WebSocket(`ws://localhost:7999/websocket?channel=${channelName}`);
-        }, 1000);
-      };
-    }
-
-    return () => {
       if (ws) {
         ws.close();
       }
+      if (selectedOption === 'LP') {
+        setMessages([]);  // Clearing the messages when LP is deactivated
+      }
     };
-  }, [wsActive]);
+  }, [selectedOption]);
+
 
   const poll = () => {
-    fetch('http://localhost:7999/longpoll', {
-      headers: {
-        'Authorization': 'Bearer 1234',
-        'X-Channel-Name': 'test-common',
-      },
-    })
-        .then((response) => response.text())
-        .then((data) => {
-          setLpMessages((prev) => [...prev, data]);
-          if (lpActive) {
-            setTimeout(poll, 500);
-          }
-        })
-        .catch((error) => {
-          if (lpActive) {
-            setTimeout(poll, 1000);
-          }
-        });
-  };
+    if (selectedOption == 'LP') {
+      fetch('http://localhost:7999/longpoll', {
+        headers: {
+          'Authorization': 'Bearer 1234',
+          'X-Channel-Name': 'test-common',
+        },
+      })
+          .then((response) => response.json())
+          .then((data) => {
+            const { message, timeStamp } = data;
+            console.log(message, timeStamp)
+            const formattedMessage = JSON.stringify({ message, timeStamp });
+            setMessages((prev) => [...prev, formattedMessage]);
+            if (selectedOption === 'LP') {
+              setTimeout(poll, 500);
+            }
 
-  useEffect(() => {
-    if (lpActive) {
-      poll();
+          })
+          .catch((error) => {
+            if (selectedOption === 'LP') {
+              setTimeout(poll, 1000);
+            }
+          });
     }
-  }, [lpActive]);
+
+  };
 
   const sendMessage = () => {
     const payload = {
-      message: `Test Message: ${messageInput} : ${new Date().toLocaleString()}`
+      message: `${messageInput}`,
+      timeStamp: `${new Date().toLocaleString()}`,
     };
 
     fetch('http://localhost:8000/publish', {
@@ -127,7 +119,14 @@ function App(): JSX.Element {
       },
       body: JSON.stringify(payload)
     })
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) {
+            return response.text().then(text => {
+              throw new Error(`Failed to publish message with status ${response.status}: ${text}`);
+            });
+          }
+          return response.text();
+        })
         .then(data => {
           console.log("Message published:", data);
         })
@@ -137,43 +136,33 @@ function App(): JSX.Element {
   };
 
   return (
-      <SafeAreaView style={backgroundStyle}>
+      <SafeAreaView style={[backgroundStyle, styles.flex1]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-        <ScrollView contentInsetAdjustmentBehavior="automatic" style={backgroundStyle}>
-          <View style={styles.container}>
-            <View style={styles.streamSection}>
-              <Button title="Start SSE" onPress={() => setSseActive(true)} />
-              <Button title="Stop SSE" onPress={() => setSseActive(false)} />
-              <FlatList
-                  data={sseMessages}
-                  renderItem={({ item }) => <Text>{item}</Text>}
-                  keyExtractor={(item, index) => index.toString()}
-              />
-              <Text>SSE Status: {sseActive ? 'Active' : 'Inactive'}</Text>
-            </View>
-
-            <View style={styles.streamSection}>
-              <Button title="Start Long Polling" onPress={() => setLpActive(true)} />
-              <Button title="Stop Long Polling" onPress={() => setLpActive(false)} />
-              <FlatList
-                  data={lpMessages}
-                  renderItem={({ item }) => <Text>{item}</Text>}
-                  keyExtractor={(item, index) => index.toString()}
-              />
-              <Text>Long Poll Status: {lpActive ? 'Active' : 'Inactive'}</Text>
-            </View>
-
-            <View style={styles.streamSection}>
-              <Button title="Start WebSocket" onPress={() => setWsActive(true)} />
-              <Button title="Stop WebSocket" onPress={() => setWsActive(false)} />
-              <FlatList
-                  data={wsMessages}
-                  renderItem={({ item }) => <Text>{item}</Text>}
-                  keyExtractor={(item, index) => index.toString()}
-              />
-              <Text>WebSocket Status: {wsActive ? 'Active' : 'Inactive'}</Text>
-            </View>
-
+        <View style={styles.flex1}>
+          <FlatList
+              style={styles.messageList}
+              data={messages}
+              renderItem={({ item }) => {
+                const parsedItem = JSON.parse(item);
+                return (
+                    <View style={styles.bubble}>
+                      <Text style={styles.messageText}>{parsedItem.message}</Text>
+                      <Text style={styles.timestamp}>{parsedItem.timeStamp}</Text>
+                    </View>
+                );
+              }}
+              keyExtractor={(item, index) => index.toString()}
+          />
+          <View style={styles.statusContainer}>
+            <Text>Status:</Text>
+            <View
+                style={[
+                  styles.statusIndicator,
+                  { backgroundColor: selectedOption ? 'green' : 'red' },
+                ]}
+            />
+          </View>
+          <View style={styles.footer}>
             <TextInput
                 style={styles.messageInput}
                 value={messageInput}
@@ -182,24 +171,72 @@ function App(): JSX.Element {
             />
             <Button title="Send" onPress={sendMessage} />
           </View>
-        </ScrollView>
+          <View style={styles.footer}>
+            <OptionButton title="SSE" />
+            <OptionButton title="WS" />
+            <OptionButton title="LP" />
+          </View>
+        </View>
       </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16
+  flex1: {
+    flex: 1,
   },
-  streamSection: {
-    marginVertical: 8
+  messageList: {
+    flex: 1,
+    margin: 10,
+  },
+  bubble: {
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    marginVertical: 5,
+    backgroundColor: '#007BFF',
+    borderTopRightRadius: 2,
+    borderTopLeftRadius: 18,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 22,
+    alignSelf: 'flex-end',
+    maxWidth: '80%',
+    justifyContent: 'space-between'
+  },
+  timestamp: {
+    textAlign: 'right',
+    color: 'white',
+    fontSize: 12,
+    marginTop: 5,
+  },
+  messageText: {
+    color: '#FFF'
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 10,
+  },
+  statusIndicator: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    marginLeft: 10,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 8,
+    borderTopWidth: 1,
+    borderColor: '#eee',
   },
   messageInput: {
+    flex: 1,
     borderColor: 'gray',
     borderWidth: 1,
-    marginVertical: 8,
-    padding: 8
-  }
+    marginRight: 8,
+    padding: 8,
+  },
 });
 
 export default App;
