@@ -1,0 +1,124 @@
+# Pushpin Routes ConfigMap
+apiVersion: v1
+data:
+  routes: |
+    *,path_beg=/my-service-route-01,path_rem=20 <%my-service-host%>.default.svc.cluster.local:3000
+    * test
+kind: ConfigMap
+metadata:
+  name: pushpin-routes-config
+  namespace: default
+
+---
+# Pushpin Deployment with Routes
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: pushpin
+  name: pushpin-deploy
+  namespace: default
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: pushpin
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: pushpin
+    spec:
+      containers:
+        - image: fanout/pushpin:latest
+          imagePullPolicy: Always
+          name: pushpin
+          ports:
+            - containerPort: 7999
+              protocol: TCP
+            - containerPort: 5561
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 500m
+              ephemeral-storage: 1Gi
+              memory: 2Gi
+            requests:
+              cpu: 500m
+              ephemeral-storage: 1Gi
+              memory: 2Gi
+          volumeMounts:
+            - name: pushpin-config
+              mountPath: /etc/pushpin/routes
+              subPath: routes
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 7999
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 7999
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: pushpin-config
+          configMap:
+            name: pushpin-routes-config
+
+---
+# Pushpin Headless Service for Service Discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: pushpin-headless
+  namespace: default
+spec:
+  clusterIP: None
+  clusterIPs:
+    - None
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+    - port: 5561
+      protocol: TCP
+      targetPort: 5561
+  selector:
+    app: pushpin
+  sessionAffinity: None
+  type: ClusterIP
+
+---
+# Pushpin Client Service
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: pushpin
+  name: pushpin-service
+  namespace: default
+spec:
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+    - nodePort: 30842
+      port: 7999
+      protocol: TCP
+      targetPort: 7999
+  selector:
+    app: pushpin
+  sessionAffinity: None
+  type: NodePort
